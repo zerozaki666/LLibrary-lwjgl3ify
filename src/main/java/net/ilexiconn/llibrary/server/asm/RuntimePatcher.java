@@ -71,6 +71,10 @@ public abstract class RuntimePatcher implements IClassTransformer, Opcodes {
             String cls = MappingHandler.INSTANCE.getClassMapping((String) obj);
             patcher = new ClassPatcher(cls);
             this.patcherMap.put(cls, patcher);
+        } else if (obj instanceof Class) {
+            String cls = MappingHandler.INSTANCE.getClassMapping(((Class) obj).getName());
+            patcher = new ClassPatcher(cls);
+            this.patcherMap.put(cls, patcher);
         }
         return patcher;
     }
