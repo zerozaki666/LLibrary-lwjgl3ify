@@ -33,7 +33,45 @@ repositories {
     }
 }
 
+def forgeVersion = '1.7.10-10.13.4.1614-1.7.10'
+def generatedLlibraryResources = layout.buildDirectory.dir('generated/resources/llibrary')
+
+sourceSets.main.resources.srcDir(generatedLlibraryResources)
+
+tasks.register('generateMappings') {
+    dependsOn tasks.named('deobfuscateMergedJarToSrg')
+
+    def outputFile = generatedLlibraryResources.map { it.file('llibrary.mappings') }
+    outputs.file(outputFile)
+
+    doLast {
+        File mappingFile = findMcpSrgFile(forgeVersion)
+        File mappingsOutput = outputFile.get().asFile
+        mappingsOutput.parentFile.mkdirs()
+
+        def mappingReplacements = new LinkedHashMap<String, String>()
+        mappingFile.eachLine { String line ->
+            String[] parts = line.split(' ')
+            if (line.startsWith('FD') && parts.length >= 3) {
+                mappingReplacements[parts[1]] = parts[2].substring(parts[2].lastIndexOf('/') + 1)
+            } else if (line.startsWith('MD') && parts.length >= 5) {
+                mappingReplacements[parts[1] + parts[2]] = parts[3].substring(parts[3].lastIndexOf('/') + 1)
+            }
+        }
+
+        mappingsOutput.withWriter('UTF-8') { writer ->
+            mappingReplacements.each { key, value ->
+                writer.write(key + '=' + value + '\n')
+            }
+        }
+
+        logger.lifecycle("Generated ${mappingReplacements.size()} LLibrary mappings from ${mappingFile}")
+    }
+}
+
 tasks.named('processResources') {
+    dependsOn tasks.named('generateMappings')
+
     def projVersion = project.version.toString()
     def mcVersion = minecraft.mcVersion.get()
 
@@ -72,6 +110,43 @@ publishing {
             url = layout.buildDirectory.dir('repo')
         }
     }
+}
+
+File findMcpSrgFile(String forgeVersion) {
+    File forgeCache = new File(gradle.gradleUserHomeDir, "caches/minecraft/net/minecraftforge/forge/${forgeVersion}")
+    List<File> candidates = [
+        new File(forgeCache, 'srgs/mcp-srg.srg'),
+        new File(forgeCache, 'unpacked/srgs/mcp-srg.srg'),
+        new File(forgeCache, 'unpacked/conf/mcp-srg.srg'),
+        new File(forgeCache, 'unpacked/src/main/resources/mcp-srg.srg')
+    ]
+
+    File directMatch = candidates.find { it.isFile() }
+    if (directMatch != null) {
+        return directMatch
+    }
+
+    List<File> matches = []
+    File caches = new File(gradle.gradleUserHomeDir, 'caches')
+    if (caches.isDirectory()) {
+        caches.eachFileRecurse { File file ->
+            if (file.name == 'mcp-srg.srg') {
+                matches.add(file)
+            }
+        }
+    }
+
+    File bestMatch = matches.find { it.path.contains('1.7.10') && it.path.toLowerCase(Locale.ROOT).contains('forge') }
+    if (bestMatch == null) {
+        bestMatch = matches.find { it.path.contains('1.7.10') }
+    }
+    if (bestMatch == null && !matches.isEmpty()) {
+        bestMatch = matches[0]
+    }
+    if (bestMatch == null) {
+        throw new GradleException('Could not find mcp-srg.srg. Run clean build once so RFG/Forge can populate the Minecraft cache, or place mcp-srg.srg in the Gradle Forge cache.')
+    }
+    return bestMatch
 }
 
 String getLLibraryVersion() {
