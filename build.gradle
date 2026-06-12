@@ -1,217 +1,96 @@
-buildscript {
-    repositories {
-        jcenter()
-        maven {
-            name = "forge"
-            url = "http://files.minecraftforge.net/maven"
-        }
-        maven {
-            name = "gradle"
-            url "https://plugins.gradle.org/m2/"
-        }
-    }
-    dependencies {
-        classpath "net.minecraftforge.gradle:ForgeGradle:1.2-SNAPSHOT"
-        classpath "gradle.plugin.com.matthewprenger:CurseGradle:1.0.7"
-    }
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'eclipse'
+    id 'com.gtnewhorizons.retrofuturagradle' version '2.0.2'
 }
 
-apply plugin: "forge"
-apply plugin: "maven-publish"
-apply plugin: "com.matthewprenger.cursegradle"
+group = 'net.ilexiconn'
+version = getLLibraryVersion() + '-1.7.10'
 
-import groovy.json.JsonSlurper;
-
-def secretFile = file "secret.json"
-project.ext.secret = null
-if (secretFile.exists()) {
-    secretFile.withReader {
-        project.ext.secret = new JsonSlurper().parse it
-    }
+base {
+    archivesName = 'llibrary'
 }
 
-version = getLLibraryVersion() + "-1.7.10"
-group = "net.ilexiconn"
-archivesBaseName = "llibrary"
-sourceCompatibility = targetCompatibility = "1.8"
-def forge = "1.7.10-10.13.4.1614-1.7.10"
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(8)
+    }
+    withSourcesJar()
+    withJavadocJar()
+}
 
 minecraft {
-    version = forge
-    runDir = "minecraft"
+    mcVersion.set('1.7.10')
+    username.set('Developer')
 }
 
-processResources {
-    inputs.property "version", project.version
-    inputs.property "mcversion", project.minecraft.version
-
-    from(sourceSets.main.resources.srcDirs) {
-        include "mcmod.info"
-        expand "version": project.version, "mcversion": project.minecraft.version
-    }
-
-    from(sourceSets.main.resources.srcDirs) {
-        exclude "mcmod.info"
+repositories {
+    mavenCentral()
+    maven {
+        name = 'GTNH Maven'
+        url = uri('https://nexus.gtnewhorizons.com/repository/public/')
     }
 }
 
-jar {
+tasks.named('processResources') {
+    def projVersion = project.version.toString()
+    def mcVersion = minecraft.mcVersion.get()
+
+    inputs.property 'version', projVersion
+    inputs.property 'mcversion', mcVersion
+
+    filesMatching('mcmod.info') {
+        expand 'version': projVersion, 'mcversion': mcVersion
+    }
+}
+
+tasks.named('deobfuscateMergedJarToSrg') {
+    accessTransformerFiles.from('src/main/resources/META-INF/llibrary_at.cfg')
+}
+
+tasks.named('jar') {
     manifest {
-        attributes "FMLAT": "llibrary_at.cfg"
-        attributes "FMLCorePlugin": "net.ilexiconn.llibrary.server.core.plugin.LLibraryPlugin"
-        attributes "FMLCorePluginContainsFMLMod": "true"
+        attributes(
+            'FMLAT': 'llibrary_at.cfg',
+            'FMLCorePlugin': 'net.ilexiconn.llibrary.server.core.plugin.LLibraryPlugin',
+            'FMLCorePluginContainsFMLMod': 'true'
+        )
     }
-}
-
-task sourceJar(type: Jar, dependsOn: classes) {
-    classifier = "sources"
-    from sourceSets.main.allSource
-}
-
-task devJar(type: Jar) {
-    classifier = "dev"
-    from sourceSets.main.output
-    manifest {
-        attributes "FMLAT": "llibrary_at.cfg"
-        attributes "FMLCorePlugin": "net.ilexiconn.llibrary.server.core.plugin.LLibraryPlugin"
-        attributes "FMLCorePluginContainsFMLMod": "true"
-    }
-}
-
-task javadocJar(type: Jar, dependsOn: javadoc) {
-    classifier = "javadoc"
-    from javadoc.getDestinationDir()
-}
-
-artifacts {
-    archives sourceJar
-    archives devJar
-    archives javadocJar
 }
 
 publishing {
     publications {
         mavenJava(MavenPublication) {
-            groupId "net.ilexiconn"
-            artifactId "llibrary"
-            version project.version
-
             from components.java
-
-            artifact devJar {
-                classifier "dev"
-            }
-
-            artifact sourceJar {
-                classifier "sources"
-            }
-
-            artifact javadocJar {
-                classifier "javadoc"
-            }
         }
     }
+
     repositories {
         maven {
-            credentials {
-                if (secret) {
-                    username secret.username
-                    password secret.password
-                } else {
-                    username ""
-                    password ""
-                }
-            }
-            if (secret) {
-                url secret.url
-            } else {
-                url ""
-            }
-        }
-    }
-}
-
-curseforge {
-    def url = "http://pastebin.com/raw/4WCeUU9p".toURL()
-    def versions = new JsonSlurper().parseText url.text
-
-    if (secret) {
-        apiKey = secret.apiKey
-    } else {
-        apiKey = ""
-    }
-
-    project {
-        id = "243298"
-
-        releaseType = "release"
-        def curse_version = getLLibraryVersion()
-        def remoteChangelog = versions.versions[curse_version];
-        if (remoteChangelog) {
-            changelog = remoteChangelog.join("\n")
-        } else {
-            changelog = ""
-        }
-
-        addGameVersion("1.7.10")
-
-        mainArtifact(jar) {
-            displayName = "LLibrary $curse_version"
-        }
-
-        addArtifact(sourceJar) {
-            displayName = "LLibrary $curse_version Sources"
-        }
-
-        addArtifact(devJar) {
-            displayName = "LLibrary $curse_version Development"
-        }
-
-        addArtifact(javadocJar) {
-            displayName = "LLibrary $curse_version Javadoc"
+            name = 'localBuildRepo'
+            url = layout.buildDirectory.dir('repo')
         }
     }
 }
 
 String getLLibraryVersion() {
-    def major = "0";
-    def revision = "0";
-    def patch = "0";
-    def prefix = "public static final String VERSION = \"";
-    def file = file("src/main/java/net/ilexiconn/llibrary/LLibrary.java")
-    file.eachLine { String s ->
-        s = s.trim();
-        if (s.startsWith(prefix)) {
-            s = s.substring(prefix.length(), s.length() - 2);
-            def pts = s.split("\\.");
-            major = pts[0];
-            revision = pts[1];
-            patch = pts[2];
+    def major = '0'
+    def revision = '0'
+    def patch = '0'
+    def prefix = 'public static final String VERSION = "'
+    def versionFile = file('src/main/java/net/ilexiconn/llibrary/LLibrary.java')
+
+    versionFile.eachLine { String line ->
+        line = line.trim()
+        if (line.startsWith(prefix)) {
+            line = line.substring(prefix.length(), line.length() - 2)
+            def pts = line.split('\\.')
+            major = pts[0]
+            revision = pts[1]
+            patch = pts[2]
         }
     }
 
-    return "$major.$revision.$patch";
+    return "$major.$revision.$patch"
 }
-
-task generateMappings << {
-    def mappingReplacements = new HashMap<String, String>()
-    def mappingFile = new File(System.properties["user.home"] + "/.gradle/caches/minecraft/net/minecraftforge/forge/" + forge + "/srgs/mcp-srg.srg")
-    if (mappingFile.exists()) {
-        mappingFile.eachLine { line ->
-            def parts = line.split(" ")
-            if (line.startsWith("FD")) {
-                mappingReplacements[parts[1]] = parts[2].substring(parts[2].lastIndexOf("/") + 1, parts[2].length())
-            } else if (line.startsWith("MD")) {
-                mappingReplacements[parts[1] + parts[2]] = parts[3].substring(parts[3].lastIndexOf("/") + 1, parts[3].length())
-            }
-        }
-    }
-
-    def mappingsFile = new File("src/main/resources/llibrary.mappings")
-    mappingsFile.withWriter("UTF-8") { writer ->
-        mappingReplacements.each { k, v -> writer.write(k + "=" + v + "\n") }
-    }
-}
-
-compileJava.dependsOn generateMappings
-decompile.dependsOn generateMappings
