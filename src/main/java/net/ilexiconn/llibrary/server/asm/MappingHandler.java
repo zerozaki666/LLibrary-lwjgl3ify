@@ -16,11 +16,16 @@ public enum MappingHandler {
 
     public void parseMappings(InputStream stream) throws IOException {
         this.map = new HashMap<>();
+        if (stream == null) {
+            return;
+        }
         BufferedReader reader = new BufferedReader(new InputStreamReader(stream));
         String line;
         while ((line = reader.readLine()) != null) {
             String[] split = line.split("=");
-            this.map.put(split[0], split[1]);
+            if (split.length >= 2) {
+                this.map.put(split[0], split[1]);
+            }
         }
         reader.close();
     }
@@ -37,7 +42,7 @@ public enum MappingHandler {
         if (obj instanceof String) {
             cls = this.getClassMapping((String) obj);
         } else if (obj instanceof Class) {
-            cls = ((Class) obj).getName();
+            cls = this.getClassMapping(((Class) obj).getName());
         }
         for (Map.Entry<String, String> entry : this.map.entrySet()) {
             if (entry.getKey().contains("(")) {
@@ -62,7 +67,7 @@ public enum MappingHandler {
         if (obj instanceof String) {
             cls = this.getClassMapping((String) obj);
         } else if (obj instanceof Class) {
-            cls = ((Class) obj).getName();
+            cls = this.getClassMapping(((Class) obj).getName());
         }
         for (Map.Entry<String, String> entry : this.map.entrySet()) {
             if (!entry.getKey().contains("(")) {
