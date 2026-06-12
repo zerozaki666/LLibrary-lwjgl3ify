@@ -69,6 +69,10 @@ tasks.register('generateMappings') {
     }
 }
 
+tasks.named('sourcesJar') {
+    dependsOn tasks.named('generateMappings')
+}
+
 tasks.named('processResources') {
     dependsOn tasks.named('generateMappings')
 
